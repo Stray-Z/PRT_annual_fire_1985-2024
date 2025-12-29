@@ -1,0 +1,103 @@
+import os
+import cv2
+import numpy as np
+from osgeo import gdal
+
+
+def tif_jpg_transform(file_path_name, bgr_savepath_name):
+    """将TIF文件转换为JPG/PNG格式
+
+    Args:
+        file_path_name: 输入的TIF文件路径
+        bgr_savepath_name: 输出的JPG/PNG文件路径
+    """
+    try:
+        # 使用GDAL读取TIF文件
+        dataset = gdal.Open(file_path_name)
+        if dataset is None:
+            print(f"无法打开文件: {file_path_name}")
+            return
+
+        # 确保影像有3个波段
+        if dataset.RasterCount < 3:
+            print(f"{file_path_name} 不包含3个波段，跳过该文件")
+            return
+
+        # 读取三个波段（红、绿、蓝）
+        r = dataset.GetRasterBand(1).ReadAsArray()
+        g = dataset.GetRasterBand(2).ReadAsArray()
+        b = dataset.GetRasterBand(3).ReadAsArray()
+
+        # 规范化像素值到0-255
+        r = r / r.max() * 255
+        g = g / g.max() * 255
+        b = b / b.max() * 255
+
+        # 防止变成负值
+        r = r.astype(np.uint8)
+        g = g.astype(np.uint8)
+        b = b.astype(np.uint8)
+
+        # 使用OpenCV的merge来拼接通道为RGB
+        bgr = cv2.merge([r, g, b])
+
+        # 保存为PNG文件
+        cv2.imwrite(bgr_savepath_name, bgr)
+        print(f"已将 {file_path_name} 转换为 {bgr_savepath_name}")
+
+    except Exception as e:
+        print(f"处理文件 {file_path_name} 时出错: {str(e)}")
+
+
+def batch_tif_to_png_by_years(years, input_path_template, output_path_template):
+    """
+    批量处理多个年份的TIF文件转换为PNG
+
+    Args:
+        years: 年份列表，如 [2001, 2002, 2003]
+        input_path_template: 输入文件夹路径模板，使用 {year} 作为占位符
+        output_path_template: 输出文件夹路径模板，使用 {year} 作为占位符
+    """
+    for year in years:
+        # 构建输入文件夹路径
+        tif_file_path = input_path_template.format(year=year)
+
+        # 构建输出文件夹路径
+        jpg_save_path = output_path_template.format(year=year)
+
+        # 检查输入文件夹是否存在
+        if not os.path.exists(tif_file_path):
+            print(f"警告: 输入文件夹不存在，跳过年份 {year}: {tif_file_path}")
+            continue
+
+        # 确保输出文件夹存在
+        if not os.path.exists(jpg_save_path):
+            os.makedirs(jpg_save_path)
+
+        print(f"开始处理年份 {year}...")
+        print(f"输入文件夹: {tif_file_path}")
+        print(f"输出文件夹: {jpg_save_path}")
+
+        # 遍历TIF文件夹并转换
+        tif_fileList = os.listdir(tif_file_path)
+        for tif_file in tif_fileList:
+            if tif_file.endswith('.tif') or tif_file.endswith('.tiff'):
+                file_path_name = os.path.join(tif_file_path, tif_file)
+                jpg_path = os.path.join(jpg_save_path, os.path.splitext(tif_file)[0] + '.png')
+                tif_jpg_transform(file_path_name, jpg_path)
+
+        print(f"完成年份 {year} 的转换，共处理 {len(tif_fileList)} 个文件")
+
+
+# 使用示例
+if __name__ == "__main__":
+    # 定义要处理的年份列表
+    years = [1985]  # 根据需要修改年份
+
+    # 定义文件路径模板
+    input_path_template = r"D:\Search\PRT\train\yanmo\{year}\yanmo1\yanmo_1\img_tif"
+    output_path_template = r"D:\Search\PRT\train\yanmo\{year}\yanmo1\yanmo_1\img_png"
+
+    # 批量处理
+    batch_tif_to_png_by_years(years, input_path_template, output_path_template)
+    print("所有年份批量转换完成！")
